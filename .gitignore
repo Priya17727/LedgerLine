@@ -1,0 +1,21 @@
+# Java and Maven
+target/
+**/target/
+*.class
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Frontend dependencies and build files
+node_modules/
+dist/
+
+# Logs
+*.log
