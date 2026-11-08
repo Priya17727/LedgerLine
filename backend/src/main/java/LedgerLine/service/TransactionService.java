@@ -1,28 +1,31 @@
 
 package LedgerLine.service;
 
-import LedgerLine.entity.Account;
-import LedgerLine.entity.MoneyTransaction;
-import LedgerLine.entity.TransactionType;
-import LedgerLine.entity.LedgerEntry;
-import LedgerLine.repository.LedgerEntryRepository;
-import LedgerLine.repository.AccountRepository;
-import LedgerLine.repository.MoneyTransactionRepository;
-import LedgerLine.dto.AuditTransactionResponse;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import LedgerLine.entity.IdempotencyRecord;
-import LedgerLine.repository.IdempotencyRecordRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.http.HttpStatus;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import org.springframework.web.server.ResponseStatusException;
-import java.security.MessageDigest;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
-import java.math.BigDecimal;
-import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import LedgerLine.dto.AuditTransactionResponse;
+import LedgerLine.entity.Account;
+import LedgerLine.entity.IdempotencyRecord;
+import LedgerLine.entity.LedgerEntry;
+import LedgerLine.entity.MoneyTransaction;
+import LedgerLine.entity.TransactionType;
+import LedgerLine.repository.AccountRepository;
+import LedgerLine.repository.IdempotencyRecordRepository;
+import LedgerLine.repository.LedgerEntryRepository;
+import LedgerLine.repository.MoneyTransactionRepository;
 
 @Service
 public class TransactionService {
@@ -32,18 +35,21 @@ public class TransactionService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final IdempotencyRecordRepository idempotencyRepository;
 private final ObjectMapper objectMapper;
+private final AuditLogService auditLogService;
     public TransactionService(
         AccountRepository accountRepository,
         MoneyTransactionRepository transactionRepository,
         LedgerEntryRepository ledgerEntryRepository,
         IdempotencyRecordRepository idempotencyRepository,
-        ObjectMapper objectMapper) {
+        ObjectMapper objectMapper,
+        AuditLogService auditLogService) {
 
     this.accountRepository = accountRepository;
     this.transactionRepository = transactionRepository;
     this.ledgerEntryRepository = ledgerEntryRepository;
     this.idempotencyRepository = idempotencyRepository;
     this.objectMapper = objectMapper;
+    this.auditLogService = auditLogService;
 }
 
   
@@ -116,9 +122,18 @@ private MoneyTransaction depositInternal(
     clearingEntry.setCredit(BigDecimal.ZERO);
 
     ledgerEntryRepository.saveAll(
-            List.of(customerEntry, clearingEntry));
+        List.of(customerEntry, clearingEntry));
 
-    return savedTransaction;
+// Save audit record
+auditLogService.log(
+        username,
+        "DEPOSIT",
+        accountNumber,
+        savedTransaction.getId(),
+        amount
+);
+
+return savedTransaction;
 }
 
   
@@ -194,10 +209,19 @@ private MoneyTransaction withdrawInternal(
     creditEntry.setDebit(BigDecimal.ZERO);
     creditEntry.setCredit(amount);
 
-    ledgerEntryRepository.saveAll(
-            List.of(debitEntry, creditEntry));
+   ledgerEntryRepository.saveAll(
+        List.of(debitEntry, creditEntry));
 
-    return savedTransaction;
+// Save audit record
+auditLogService.log(
+        username,
+        "WITHDRAWAL",
+        accountNumber,
+        savedTransaction.getId(),
+        amount
+);
+
+return savedTransaction;
 }
 
 
@@ -320,9 +344,27 @@ private List<MoneyTransaction> transferInternal(
     creditEntry.setCredit(amount);
 
     ledgerEntryRepository.saveAll(
-            List.of(debitEntry, creditEntry));
+        List.of(debitEntry, creditEntry));
 
-    return List.of(savedOutgoing, savedIncoming);
+// Save audit record for sender
+auditLogService.log(
+        username,
+        "TRANSFER_OUT",
+        senderAccountNumber,
+        savedOutgoing.getId(),
+        amount
+);
+
+// Save audit record for receiver
+auditLogService.log(
+        username,
+        "TRANSFER_IN",
+        receiverAccountNumber,
+        savedIncoming.getId(),
+        amount
+);
+
+return List.of(savedOutgoing, savedIncoming);
 }
 
     @Transactional(readOnly = true)
