@@ -1,15 +1,15 @@
 
 package LedgerLine.service;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import LedgerLine.entity.Account;
 import LedgerLine.entity.AppUser;
 import LedgerLine.repository.AccountRepository;
 import LedgerLine.repository.AppUserRepository;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 @Service
 public class AccountService {
@@ -44,4 +44,23 @@ public class AccountService {
 
         return accountRepository.save(account);
     }
+    public List<Account> getMyAccounts(String username) {
+
+    AppUser user = userRepository.findByUsername(username)
+            .orElseThrow(() ->
+                    new IllegalArgumentException("User not found"));
+
+    return accountRepository.findByUserId(user.getId());
+}
+
+public Account getAccountBalance(
+        String username, String accountNumber) {
+
+    return accountRepository
+            .findByAccountNumberAndUserUsername(
+                    accountNumber, username)
+            .orElseThrow(() ->
+                    new IllegalArgumentException(
+                            "Account not found or access denied"));
+}
 }
