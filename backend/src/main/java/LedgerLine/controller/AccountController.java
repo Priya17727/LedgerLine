@@ -5,7 +5,7 @@ import LedgerLine.entity.Account;
 import LedgerLine.entity.AppUser;
 import LedgerLine.repository.AppUserRepository;
 import LedgerLine.service.AccountService;
-
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -28,8 +28,9 @@ public class AccountController {
         this.userRepository = userRepository;
     }
 
-    @PostMapping
-    public ResponseEntity<Map<String, Object>> createAccount(
+   @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
+@PostMapping
+public ResponseEntity<Map<String, Object>> createAccount(
             Authentication authentication) {
 
         AppUser user = userRepository

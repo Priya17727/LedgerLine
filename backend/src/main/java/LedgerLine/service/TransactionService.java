@@ -8,7 +8,7 @@ import LedgerLine.entity.LedgerEntry;
 import LedgerLine.repository.LedgerEntryRepository;
 import LedgerLine.repository.AccountRepository;
 import LedgerLine.repository.MoneyTransactionRepository;
-
+import LedgerLine.dto.AuditTransactionResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -230,7 +230,22 @@ return List.of(savedOutgoing, savedIncoming);
         return transactionRepository
                 .findByAccountIdOrderByCreatedAtDesc(account.getId());
     }
+@Transactional(readOnly = true)
+public List<AuditTransactionResponse> getAllTransactionsForAudit() {
 
+    return transactionRepository.findAll()
+            .stream()
+            .map(transaction -> new AuditTransactionResponse(
+                    transaction.getId(),
+                    transaction.getAccount().getAccountNumber(),
+                    transaction.getAccount().getUser().getUsername(),
+                    transaction.getType().name(),
+                    transaction.getAmount(),
+                    transaction.getStatus(),
+                    transaction.getCreatedAt()
+            ))
+            .toList();
+}
     private Account getAccount(String username, String accountNumber) {
 
         return accountRepository

@@ -4,11 +4,12 @@ package LedgerLine.controller;
 import LedgerLine.entity.MoneyTransaction;
 import LedgerLine.service.TransactionService;
 import LedgerLine.dto.TransactionHistoryResponse;
-
+import LedgerLine.dto.AuditTransactionResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.math.BigDecimal;
@@ -23,8 +24,9 @@ public class TransactionController {
     public TransactionController(TransactionService transactionService) {
         this.transactionService = transactionService;
     }
-
+@PreAuthorize("hasRole('ACCOUNT_HOLDER')")
     @PostMapping("/deposit")
+    
     public ResponseEntity<Map<String, Object>> deposit(
             Authentication authentication,
             @RequestBody Map<String, String> request) {
@@ -45,8 +47,9 @@ public class TransactionController {
                 )
         );
     }
-
+ @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
     @PostMapping("/withdraw")
+   
     public ResponseEntity<Map<String, Object>> withdraw(
             Authentication authentication,
             @RequestBody Map<String, String> request) {
@@ -67,7 +70,9 @@ public class TransactionController {
                 )
         );
     }
+     @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
     @PostMapping("/transfer")
+   
 public ResponseEntity<Map<String, Object>> transfer(
         Authentication authentication,
         @RequestBody Map<String, String> request) {
@@ -90,7 +95,9 @@ public ResponseEntity<Map<String, Object>> transfer(
             )
     );
 }
+ @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
    @GetMapping("/history/{accountNumber}")
+  
 public ResponseEntity<List<TransactionHistoryResponse>> getHistory(
         Authentication authentication,
         @PathVariable String accountNumber) {
@@ -111,5 +118,14 @@ public ResponseEntity<List<TransactionHistoryResponse>> getHistory(
             .collect(Collectors.toList());
 
     return ResponseEntity.ok(history);
+}
+@GetMapping("/audit")
+@PreAuthorize("hasRole('AUDITOR')")
+public ResponseEntity<List<AuditTransactionResponse>> getAuditReport() {
+
+    List<AuditTransactionResponse> report =
+            transactionService.getAllTransactionsForAudit();
+
+    return ResponseEntity.ok(report);
 }
 }
