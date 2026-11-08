@@ -1,19 +1,20 @@
 
 package LedgerLine.controller;
 
-import LedgerLine.entity.MoneyTransaction;
 import LedgerLine.service.TransactionService;
 import LedgerLine.dto.TransactionHistoryResponse;
 import LedgerLine.dto.AuditTransactionResponse;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
-import java.util.List;
-import java.util.stream.Collectors;
+
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/transactions")
@@ -24,108 +25,90 @@ public class TransactionController {
     public TransactionController(TransactionService transactionService) {
         this.transactionService = transactionService;
     }
-@PreAuthorize("hasRole('ACCOUNT_HOLDER')")
+
+    @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
     @PostMapping("/deposit")
-    
     public ResponseEntity<Map<String, Object>> deposit(
             Authentication authentication,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestBody Map<String, String> request) {
 
-        MoneyTransaction transaction = transactionService.deposit(
+        Map<String, Object> response = transactionService.deposit(
                 authentication.getName(),
                 request.get("accountNumber"),
-                new BigDecimal(request.get("amount"))
+                new BigDecimal(request.get("amount")),
+                idempotencyKey
         );
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(
-                Map.of(
-                        "message", "Deposit successful",
-                        "transactionId", transaction.getId(),
-                        "type", transaction.getType(),
-                        "amount", transaction.getAmount(),
-                        "status", transaction.getStatus()
-                )
-        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
- @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
+
+    @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
     @PostMapping("/withdraw")
-   
     public ResponseEntity<Map<String, Object>> withdraw(
             Authentication authentication,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestBody Map<String, String> request) {
 
-        MoneyTransaction transaction = transactionService.withdraw(
+        Map<String, Object> response = transactionService.withdraw(
                 authentication.getName(),
                 request.get("accountNumber"),
-                new BigDecimal(request.get("amount"))
+                new BigDecimal(request.get("amount")),
+                idempotencyKey
         );
 
-        return ResponseEntity.ok(
-                Map.of(
-                        "message", "Withdrawal successful",
-                        "transactionId", transaction.getId(),
-                        "type", transaction.getType(),
-                        "amount", transaction.getAmount(),
-                        "status", transaction.getStatus()
-                )
-        );
+        return ResponseEntity.ok(response);
     }
-     @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
+
+    @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
     @PostMapping("/transfer")
-   
-public ResponseEntity<Map<String, Object>> transfer(
-        Authentication authentication,
-        @RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> transfer(
+            Authentication authentication,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody Map<String, String> request) {
 
-    List<MoneyTransaction> transactions =
-            transactionService.transfer(
-                    authentication.getName(),
-                    request.get("senderAccountNumber"),
-                    request.get("receiverAccountNumber"),
-                    new BigDecimal(request.get("amount"))
-            );
+        Map<String, Object> response = transactionService.transfer(
+                authentication.getName(),
+                request.get("senderAccountNumber"),
+                request.get("receiverAccountNumber"),
+                new BigDecimal(request.get("amount")),
+                idempotencyKey
+        );
 
-    return ResponseEntity.ok(
-            Map.of(
-                    "message", "Transfer successful",
-                    "senderTransactionId", transactions.get(0).getId(),
-                    "receiverTransactionId", transactions.get(1).getId(),
-                    "amount", transactions.get(0).getAmount(),
-                    "status", "SUCCESS"
-            )
-    );
-}
- @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
-   @GetMapping("/history/{accountNumber}")
-  
-public ResponseEntity<List<TransactionHistoryResponse>> getHistory(
-        Authentication authentication,
-        @PathVariable String accountNumber) {
+        return ResponseEntity.ok(response);
+    }
 
-    List<TransactionHistoryResponse> history =
-            transactionService.getHistory(
-                    authentication.getName(),
-                    accountNumber
-            )
-            .stream()
-            .map(transaction -> new TransactionHistoryResponse(
-                    transaction.getId(),
-                    transaction.getType().name(),
-                    transaction.getAmount(),
-                    transaction.getStatus(),
-                    transaction.getCreatedAt()
-            ))
-            .collect(Collectors.toList());
+    @PreAuthorize("hasRole('ACCOUNT_HOLDER')")
+    @GetMapping("/history/{accountNumber}")
+    public ResponseEntity<List<TransactionHistoryResponse>> getHistory(
+            Authentication authentication,
+            @PathVariable String accountNumber) {
 
-    return ResponseEntity.ok(history);
-}
-@GetMapping("/audit")
-@PreAuthorize("hasRole('AUDITOR')")
-public ResponseEntity<List<AuditTransactionResponse>> getAuditReport() {
+        List<TransactionHistoryResponse> history =
+                transactionService.getHistory(
+                        authentication.getName(),
+                        accountNumber
+                )
+                .stream()
+                .map(transaction -> new TransactionHistoryResponse(
+                        transaction.getId(),
+                        transaction.getType().name(),
+                        transaction.getAmount(),
+                        transaction.getStatus(),
+                        transaction.getCreatedAt()
+                ))
+                .collect(Collectors.toList());
 
-    List<AuditTransactionResponse> report =
-            transactionService.getAllTransactionsForAudit();
+        return ResponseEntity.ok(history);
+    }
 
-    return ResponseEntity.ok(report);
-}
+    @GetMapping("/audit")
+    @PreAuthorize("hasRole('AUDITOR')")
+    public ResponseEntity<List<AuditTransactionResponse>> getAuditReport() {
+
+        List<AuditTransactionResponse> report =
+                transactionService.getAllTransactionsForAudit();
+
+        return ResponseEntity.ok(report);
+    }
 }

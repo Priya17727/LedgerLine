@@ -11,7 +11,16 @@ import LedgerLine.repository.MoneyTransactionRepository;
 import LedgerLine.dto.AuditTransactionResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import LedgerLine.entity.IdempotencyRecord;
+import LedgerLine.repository.IdempotencyRecordRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.HttpStatus;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import org.springframework.web.server.ResponseStatusException;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.function.Supplier;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -21,20 +30,56 @@ public class TransactionService {
     private final AccountRepository accountRepository;
     private final MoneyTransactionRepository transactionRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
-
+    private final IdempotencyRecordRepository idempotencyRepository;
+private final ObjectMapper objectMapper;
     public TransactionService(
         AccountRepository accountRepository,
         MoneyTransactionRepository transactionRepository,
-        LedgerEntryRepository ledgerEntryRepository) {
+        LedgerEntryRepository ledgerEntryRepository,
+        IdempotencyRecordRepository idempotencyRepository,
+        ObjectMapper objectMapper) {
 
     this.accountRepository = accountRepository;
     this.transactionRepository = transactionRepository;
     this.ledgerEntryRepository = ledgerEntryRepository;
+    this.idempotencyRepository = idempotencyRepository;
+    this.objectMapper = objectMapper;
 }
 
-   @Transactional
-public MoneyTransaction deposit(
-        String username, String accountNumber, BigDecimal amount) {
+  
+@Transactional
+@SuppressWarnings("unchecked")
+public Map<String, Object> deposit(
+        String username,
+        String accountNumber,
+        BigDecimal amount,
+        String idempotencyKey) {
+
+    return (Map<String, Object>) executeIdempotently(
+            username,
+            idempotencyKey,
+            "DEPOSIT",
+            accountNumber + "|" + amount.toPlainString(),
+            Map.class,
+            () -> {
+                MoneyTransaction transaction =
+                        depositInternal(username, accountNumber, amount);
+
+                return Map.of(
+                        "message", "Deposit successful",
+                        "transactionId", transaction.getId(),
+                        "type", transaction.getType().name(),
+                        "amount", transaction.getAmount(),
+                        "status", transaction.getStatus()
+                );
+            }
+    );
+}
+
+private MoneyTransaction depositInternal(
+        String username,
+        String accountNumber,
+        BigDecimal amount) {
 
     validateAmount(amount);
 
@@ -58,14 +103,12 @@ public MoneyTransaction deposit(
     MoneyTransaction savedTransaction =
             transactionRepository.save(transaction);
 
-    // Customer account: CREDIT
     LedgerEntry customerEntry = new LedgerEntry();
     customerEntry.setTransaction(savedTransaction);
     customerEntry.setAccount(account);
     customerEntry.setDebit(BigDecimal.ZERO);
     customerEntry.setCredit(amount);
 
-    // Clearing account: DEBIT
     LedgerEntry clearingEntry = new LedgerEntry();
     clearingEntry.setTransaction(savedTransaction);
     clearingEntry.setAccount(clearingAccount);
@@ -78,9 +121,40 @@ public MoneyTransaction deposit(
     return savedTransaction;
 }
 
-    @Transactional
-public MoneyTransaction withdraw(
-        String username, String accountNumber, BigDecimal amount) {
+  
+@Transactional
+@SuppressWarnings("unchecked")
+public Map<String, Object> withdraw(
+        String username,
+        String accountNumber,
+        BigDecimal amount,
+        String idempotencyKey) {
+
+    return (Map<String, Object>) executeIdempotently(
+            username,
+            idempotencyKey,
+            "WITHDRAWAL",
+            accountNumber + "|" + amount.toPlainString(),
+            Map.class,
+            () -> {
+                MoneyTransaction transaction =
+                        withdrawInternal(username, accountNumber, amount);
+
+                return Map.of(
+                        "message", "Withdrawal successful",
+                        "transactionId", transaction.getId(),
+                        "type", transaction.getType().name(),
+                        "amount", transaction.getAmount(),
+                        "status", transaction.getStatus()
+                );
+            }
+    );
+}
+
+private MoneyTransaction withdrawInternal(
+        String username,
+        String accountNumber,
+        BigDecimal amount) {
 
     validateAmount(amount);
 
@@ -108,14 +182,12 @@ public MoneyTransaction withdraw(
     MoneyTransaction savedTransaction =
             transactionRepository.save(transaction);
 
-    // Customer account: DEBIT
     LedgerEntry debitEntry = new LedgerEntry();
     debitEntry.setTransaction(savedTransaction);
     debitEntry.setAccount(account);
     debitEntry.setDebit(amount);
     debitEntry.setCredit(BigDecimal.ZERO);
 
-    // Clearing account: CREDIT
     LedgerEntry creditEntry = new LedgerEntry();
     creditEntry.setTransaction(savedTransaction);
     creditEntry.setAccount(clearingAccount);
@@ -127,8 +199,46 @@ public MoneyTransaction withdraw(
 
     return savedTransaction;
 }
+
+
 @Transactional
-public List<MoneyTransaction> transfer(
+@SuppressWarnings("unchecked")
+public Map<String, Object> transfer(
+        String username,
+        String senderAccountNumber,
+        String receiverAccountNumber,
+        BigDecimal amount,
+        String idempotencyKey) {
+
+    return (Map<String, Object>) executeIdempotently(
+            username,
+            idempotencyKey,
+            "TRANSFER",
+            senderAccountNumber + "|" +
+                    receiverAccountNumber + "|" +
+                    amount.toPlainString(),
+            Map.class,
+            () -> {
+                List<MoneyTransaction> transactions =
+                        transferInternal(
+                                username,
+                                senderAccountNumber,
+                                receiverAccountNumber,
+                                amount
+                        );
+
+                return Map.of(
+                        "message", "Transfer successful",
+                        "senderTransactionId", transactions.get(0).getId(),
+                        "receiverTransactionId", transactions.get(1).getId(),
+                        "amount", transactions.get(0).getAmount(),
+                        "status", "SUCCESS"
+                );
+            }
+    );
+}
+
+private List<MoneyTransaction> transferInternal(
         String username,
         String senderAccountNumber,
         String receiverAccountNumber,
@@ -141,7 +251,6 @@ public List<MoneyTransaction> transfer(
                 "Cannot transfer to the same account");
     }
 
-    // Lock accounts in a consistent order to reduce deadlocks
     String firstNumber = senderAccountNumber.compareTo(
             receiverAccountNumber) < 0
             ? senderAccountNumber : receiverAccountNumber;
@@ -192,32 +301,30 @@ public List<MoneyTransaction> transfer(
     accountRepository.save(sender);
     accountRepository.save(receiver);
 
-   MoneyTransaction savedOutgoing =
-        transactionRepository.save(outgoing);
+    MoneyTransaction savedOutgoing =
+            transactionRepository.save(outgoing);
 
-MoneyTransaction savedIncoming =
-        transactionRepository.save(incoming);
+    MoneyTransaction savedIncoming =
+            transactionRepository.save(incoming);
 
-// Ledger entry for sender: DEBIT
-LedgerEntry debitEntry = new LedgerEntry();
-debitEntry.setTransaction(savedOutgoing);
-debitEntry.setAccount(sender);
-debitEntry.setDebit(amount);
-debitEntry.setCredit(BigDecimal.ZERO);
+    LedgerEntry debitEntry = new LedgerEntry();
+    debitEntry.setTransaction(savedOutgoing);
+    debitEntry.setAccount(sender);
+    debitEntry.setDebit(amount);
+    debitEntry.setCredit(BigDecimal.ZERO);
 
-// Ledger entry for receiver: CREDIT
-LedgerEntry creditEntry = new LedgerEntry();
-creditEntry.setTransaction(savedIncoming);
-creditEntry.setAccount(receiver);
-creditEntry.setDebit(BigDecimal.ZERO);
-creditEntry.setCredit(amount);
+    LedgerEntry creditEntry = new LedgerEntry();
+    creditEntry.setTransaction(savedIncoming);
+    creditEntry.setAccount(receiver);
+    creditEntry.setDebit(BigDecimal.ZERO);
+    creditEntry.setCredit(amount);
 
-// Save both ledger entries
-ledgerEntryRepository.saveAll(
-        List.of(debitEntry, creditEntry));
+    ledgerEntryRepository.saveAll(
+            List.of(debitEntry, creditEntry));
 
-return List.of(savedOutgoing, savedIncoming);
+    return List.of(savedOutgoing, savedIncoming);
 }
+
     @Transactional(readOnly = true)
     public List<MoneyTransaction> getHistory(
             String username, String accountNumber) {
@@ -265,4 +372,86 @@ public List<AuditTransactionResponse> getAllTransactionsForAudit() {
                     "Amount must be positive with at most two decimal places");
         }
     }
+    private <T> T executeIdempotently(
+        String username,
+        String idempotencyKey,
+        String operation,
+        String requestData,
+        Class<T> responseType,
+        Supplier<T> action) {
+
+    if (idempotencyKey == null || idempotencyKey.isBlank()
+            || idempotencyKey.length() > 100) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "A valid Idempotency-Key header is required");
+    }
+
+    try {
+        String requestHash = sha256(operation + "|" + requestData);
+
+        int inserted = idempotencyRepository.insertIfAbsent(
+                username,
+                idempotencyKey,
+                operation,
+                requestHash
+        );
+
+        IdempotencyRecord record = idempotencyRepository
+                .findRecord(username, idempotencyKey)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Could not retrieve idempotency record"));
+
+        if (!record.getRequestHash().equals(requestHash)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Idempotency key was already used for a different request");
+        }
+
+        if (inserted == 0 && record.getResponseJson() != null) {
+            return objectMapper.readerFor(responseType)
+        .with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+        .readValue(record.getResponseJson());
+        }
+
+        if (inserted == 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Request with this key is already being processed");
+        }
+
+        T response = action.get();
+
+        record.setResponseJson(
+                objectMapper.writeValueAsString(response));
+
+        idempotencyRepository.save(record);
+
+        return response;
+
+    } catch (ResponseStatusException exception) {
+    throw exception;
+} catch (RuntimeException exception) {
+    throw exception;
+} catch (Exception exception) {
+    throw new IllegalStateException(
+            "Idempotency processing failed", exception);
+}
+}
+
+private String sha256(String value) throws Exception {
+
+    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
+    byte[] hash = digest.digest(
+            value.getBytes(StandardCharsets.UTF_8));
+
+    StringBuilder result = new StringBuilder();
+
+    for (byte b : hash) {
+        result.append(String.format("%02x", b));
+    }
+
+    return result.toString();
+}
 }
