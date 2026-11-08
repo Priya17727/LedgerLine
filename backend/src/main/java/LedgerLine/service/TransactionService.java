@@ -1,9 +1,10 @@
 
 package LedgerLine.service;
-
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -17,6 +18,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import LedgerLine.dto.AuditTransactionResponse;
+import LedgerLine.dto.TransactionHistoryResponse;
 import LedgerLine.entity.Account;
 import LedgerLine.entity.IdempotencyRecord;
 import LedgerLine.entity.LedgerEntry;
@@ -368,17 +370,50 @@ return List.of(savedOutgoing, savedIncoming);
 }
 
     @Transactional(readOnly = true)
-    public List<MoneyTransaction> getHistory(
-            String username, String accountNumber) {
+public List<TransactionHistoryResponse> getHistory(
+        String username, String accountNumber) {
 
-        Account account = accountRepository
-                .findByAccountNumberAndUserUsername(accountNumber, username)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Account not found or access denied"));
+    Account account = accountRepository
+            .findByAccountNumberAndUserUsername(accountNumber, username)
+            .orElseThrow(() -> new IllegalArgumentException(
+                    "Account not found or access denied"));
 
-        return transactionRepository
-                .findByAccountIdOrderByCreatedAtDesc(account.getId());
+    List<LedgerEntry> entries =
+            ledgerEntryRepository
+                    .findByAccountIdOrderByCreatedAtAscIdAsc(
+                            account.getId());
+
+    List<TransactionHistoryResponse> history = new ArrayList<>();
+
+    BigDecimal runningBalance = BigDecimal.ZERO;
+
+    for (LedgerEntry entry : entries) {
+
+        BigDecimal debit = entry.getDebit();
+        BigDecimal credit = entry.getCredit();
+
+        runningBalance = runningBalance
+                .add(credit)
+                .subtract(debit);
+
+        MoneyTransaction transaction = entry.getTransaction();
+
+        history.add(new TransactionHistoryResponse(
+                transaction.getId(),
+                transaction.getType().name(),
+                transaction.getAmount(),
+                debit,
+                credit,
+                runningBalance,
+                transaction.getStatus(),
+                transaction.getCreatedAt()
+        ));
     }
+
+    Collections.reverse(history);
+
+    return history;
+}
 @Transactional(readOnly = true)
 public List<AuditTransactionResponse> getAllTransactionsForAudit() {
 
