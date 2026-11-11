@@ -21,3 +21,6 @@ dist/
 *.log
 
 ledgerline_before_ledger_repair.dump
+
+# Temporary troubleshooting files
+backend/startup-check.txt
