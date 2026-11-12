@@ -83,3 +83,6 @@ Production deployment should additionally configure HTTPS, secrets management, d
 ## Project Goal
 
 BalanceVault aims to make money movement accurate, authorized, and traceable.
+
+## API Documentation
+See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for API endpoints, authentication, roles, and request examples.

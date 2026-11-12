@@ -38,3 +38,4 @@ AI assistance was used during the development of BalanceVault for guidance, debu
 ## Important Note
 
 AI assistance was used as a development aid. The project code, configuration, testing, and final submission should be reviewed and understood by the project developer. AI-generated suggestions were not treated as a substitute for verification.
+
