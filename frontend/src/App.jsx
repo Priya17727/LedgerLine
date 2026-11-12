@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import './App.css'
 
-const API = 'http://localhost:8080'
+const API = 'https://balancevault-backend-hca2.onrender.com'
 
 const money = value =>
   `₹${Number(value || 0).toLocaleString('en-IN', {
