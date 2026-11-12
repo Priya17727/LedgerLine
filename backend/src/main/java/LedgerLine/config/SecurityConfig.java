@@ -1,8 +1,6 @@
 
 package LedgerLine.config;
 
-import LedgerLine.service.CustomUserDetailsService;
-
 import java.util.List;
 
 import org.springframework.context.annotation.Bean;
@@ -10,16 +8,17 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
-
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import LedgerLine.service.CustomUserDetailsService;
 
 @Configuration
 @EnableMethodSecurity
@@ -49,8 +48,11 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
 
         configuration.setAllowedOrigins(
-                List.of("http://localhost:5173")
-        );
+        List.of(
+                "http://localhost:5173",
+                "https://balancevault-frontend-226h.onrender.com"
+        )
+);
 
         configuration.setAllowedMethods(
                 List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
