@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import LedgerLine.entity.AccountRequest;
@@ -21,6 +22,15 @@ public interface AccountRequestRepository
     List<AccountRequest> findByStatusOrderByRequestedAtAsc(
             RequestStatus status);
 
+    @Query("""
+            SELECT r FROM AccountRequest r
+            JOIN FETCH r.user
+            WHERE r.status = :status
+            ORDER BY r.requestedAt ASC
+            """)
+    List<AccountRequest> findPendingRequestsWithUser(
+            @Param("status") RequestStatus status);
+
     Optional<AccountRequest> findByIdAndUserUsername(
             Long id, String username);
 
@@ -28,8 +38,7 @@ public interface AccountRequestRepository
             Long userId, RequestStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @org.springframework.data.jpa.repository.Query(
-            "SELECT r FROM AccountRequest r WHERE r.id = :requestId")
+    @Query("SELECT r FROM AccountRequest r WHERE r.id = :requestId")
     Optional<AccountRequest> findByIdForUpdate(
             @Param("requestId") Long requestId);
 }

@@ -58,12 +58,13 @@ public class AccountRequestService {
                 .findByUserUsernameOrderByRequestedAtDesc(username);
     }
 
-    public List<AccountRequest> getPendingRequests() {
+   @Transactional(readOnly = true)
+public List<AccountRequest> getPendingRequests() {
 
-        return requestRepository
-                .findByStatusOrderByRequestedAtAsc(
-                        RequestStatus.PENDING);
-    }
+    return requestRepository
+            .findPendingRequestsWithUser(
+                    RequestStatus.PENDING);
+}
 
     @Transactional
     public Account approveRequest(Long requestId, String adminUsername) {
