@@ -1,4 +1,3 @@
-
 package LedgerLine.controller;
 
 import org.springframework.http.HttpStatus;
@@ -22,6 +21,20 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
+                .body(response);
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalState(
+            IllegalStateException exception) {
+
+        Map<String, String> response = Map.of(
+                "status", "FAILED",
+                "message", exception.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
                 .body(response);
     }
 }
